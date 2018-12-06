@@ -270,6 +270,9 @@ NSUInteger const kSEGBackgroundTaskInvalid = 0;
 {
     // attach these parts of the payload outside since they are all synchronous
     payload[@"type"] = action;
+    payload[@"timestamp"] = iso8601FormattedString([NSDate date]);
+    payload[@"messageId"] = GenerateUUIDString();
+    payload[@"anonymousId"] = [self.analytics getAnonymousId];
 
     [self dispatchBackground:^{
         // attach userId and anonymousId inside the dispatch_async in case
@@ -279,7 +282,6 @@ NSUInteger const kSEGBackgroundTaskInvalid = 0;
         if (![action isEqualToString:@"alias"]) {
             [payload setValue:[SEGState sharedInstance].userInfo.userId forKey:@"userId"];
         }
-        [payload setValue:[self.analytics getAnonymousId] forKey:@"anonymousId"];
 
         [payload setValue:[self integrationsDictionary:integrations] forKey:@"integrations"];
 
