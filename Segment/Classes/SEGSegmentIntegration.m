@@ -270,7 +270,18 @@ NSUInteger const kSEGBackgroundTaskInvalid = 0;
 {
     // attach these parts of the payload outside since they are all synchronous
     payload[@"type"] = action;
-    payload[@"timestamp"] = iso8601FormattedString([NSDate date]);
+
+    // Only define the timestamp if it isn't already set.
+    id const existingTimestamp = [payload valueForKeyPath:@"properties.timestamp"];
+    if (existingTimestamp) {
+        payload[@"timestamp"] = existingTimestamp;
+        NSMutableDictionary * const mutableProperties = [payload[@"properties"] mutableCopy];
+        mutableProperties[@"timestamp"] = nil;
+        payload[@"properties"] = [mutableProperties copy];
+    } else {
+        payload[@"timestamp"] = iso8601FormattedString([NSDate date]);
+    }
+
     payload[@"messageId"] = GenerateUUIDString();
     payload[@"anonymousId"] = [self.analytics getAnonymousId];
 
@@ -388,7 +399,6 @@ NSUInteger const kSEGBackgroundTaskInvalid = 0;
 - (void)sendData:(NSArray *)batch
 {
     NSMutableDictionary *payload = [[NSMutableDictionary alloc] init];
-    [payload setObject:iso8601FormattedString([NSDate date]) forKey:@"sentAt"];
     [payload setObject:batch forKey:@"batch"];
 
     SEGLog(@"%@ Flushing %lu of %lu queued API calls.", self, (unsigned long)batch.count, (unsigned long)self.queue.count);
