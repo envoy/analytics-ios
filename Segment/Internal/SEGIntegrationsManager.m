@@ -6,6 +6,7 @@
 //  Copyright © 2016 Segment. All rights reserved.
 //
 
+@import Foundation;
 #if TARGET_OS_IPHONE
 @import UIKit;
 #endif
@@ -20,6 +21,7 @@
 #import "SEGUserDefaultsStorage.h"
 #import "SEGIntegrationsManager.h"
 #import "SEGSegmentIntegrationFactory.h"
+#import "SEGSegmentIntegration.h"
 #import "SEGPayload.h"
 #import "SEGIdentifyPayload.h"
 #import "SEGTrackPayload.h"
@@ -212,15 +214,6 @@ NSString *const kSEGCachedSettingsFilename = @"analytics.settings.v2.plist";
 {
     NSCAssert2(payload.userId.length > 0 || payload.traits.count > 0, @"either userId (%@) or traits (%@) must be provided.", payload.userId, payload.traits);
 
-    NSString *anonymousId = payload.anonymousId;
-    NSString *existingAnonymousId = self.cachedAnonymousId;
-    
-    if (anonymousId == nil) {
-        payload.anonymousId = anonymousId;
-    } else if (![anonymousId isEqualToString:existingAnonymousId]) {
-        [self saveAnonymousId:anonymousId];
-    }
-
     [self callIntegrationsWithSelector:NSSelectorFromString(@"identify:")
                              arguments:@[ payload ]
                                options:payload.options
@@ -404,7 +397,7 @@ NSString *const kSEGCachedSettingsFilename = @"analytics.settings.v2.plist";
 - (void)updateIntegrationsWithSettings:(NSDictionary *)projectSettings
 {
     // see if we have a new segment API host and set it.
-    NSString *apiHost = projectSettings[@"Segment.io"][@"apiHost"];
+    NSString *apiHost = projectSettings[kSEGSegmentDestinationName][@"apiHost"];
     if (apiHost) {
         [SEGUtils saveAPIHost:apiHost];
     }
@@ -451,15 +444,25 @@ NSString *const kSEGCachedSettingsFilename = @"analytics.settings.v2.plist";
 
 - (NSDictionary *)defaultSettings
 {
-    return @{
+    NSDictionary *segment = [self segmentSettings];
+    NSDictionary *result = @{
         @"integrations" : @{
-            @"Segment.io" : @{
-                    @"apiKey" : self.configuration.writeKey,
-                    @"apiHost" : [SEGUtils getAPIHost]
-            },
+            kSEGSegmentDestinationName : segment
         },
-        @"plan" : @{@"track" : @{}}
+        @"plan" : @{
+            @"track" : @{}
+        }
     };
+    return result;
+}
+
+- (NSDictionary *)segmentSettings
+{
+    NSDictionary *result = @{
+        @"apiKey" : self.configuration.writeKey,
+        @"apiHost" : [SEGUtils getAPIHost]
+    };
+    return result;
 }
 
 - (void)refreshSettings
@@ -493,9 +496,9 @@ NSString *const kSEGCachedSettingsFilename = @"analytics.settings.v2.plist";
                         NSMutableDictionary *newSettings = [self.configuration.defaultSettings serializableMutableDeepCopy];
                         NSMutableDictionary *integrations = newSettings[@"integrations"];
                         if (integrations != nil) {
-                            integrations[@"Segment.io"] = @{@"apiKey": self.configuration.writeKey, @"apiHost": [SEGUtils getAPIHost]};
+                            integrations[kSEGSegmentDestinationName] = [self segmentSettings];
                         } else {
-                            newSettings[@"integrations"] = @{@"integrations": @{@"apiKey": self.configuration.writeKey, @"apiHost": [SEGUtils getAPIHost]}};
+                            newSettings[@"integrations"] = @{kSEGSegmentDestinationName: [self segmentSettings]};
                         }
                         
                         [self setCachedSettings:newSettings];
@@ -518,7 +521,7 @@ NSString *const kSEGCachedSettingsFilename = @"analytics.settings.v2.plist";
 + (BOOL)isIntegration:(NSString *)key enabledInOptions:(NSDictionary *)options
 {
     // If the event is in the tracking plan, it should always be sent to api.segment.io.
-    if ([@"Segment.io" isEqualToString:key]) {
+    if ([kSEGSegmentDestinationName isEqualToString:key]) {
         return YES;
     }
     if (options[key]) {
@@ -548,7 +551,7 @@ NSString *const kSEGCachedSettingsFilename = @"analytics.settings.v2.plist";
 + (BOOL)isTrackEvent:(NSString *)event enabledForIntegration:(NSString *)key inPlan:(NSDictionary *)plan
 {
     // Whether the event is enabled or disabled, it should always be sent to api.segment.io.
-    if ([key isEqualToString:@"Segment.io"]) {
+    if ([key isEqualToString:kSEGSegmentDestinationName]) {
         return YES;
     }
 
